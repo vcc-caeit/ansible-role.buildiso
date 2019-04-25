@@ -1,0 +1,21 @@
+---
+buildiso_input: http://cdimage.ubuntu.com/daily-live/current/eoan-desktop-amd64.iso
+buildiso_output: custom.iso
+
+buildiso_menu:
+  - name: 'Try Ubuntu without installing'
+    label: live
+    preseed: ubuntu
+  - name: 'Install Ubuntu'
+    cmdline: only-ubiquity
+    label: live-install
+    preseed: ubuntu
+  - name: 'OEM install (for manufacturers)'
+    cmdline: 'only-ubiquity'
+    pkgconf: 'oem-config/enable=true'
+    preseed: ubuntu
+  - name: 'Check disc for defects'
+    cmdline: integrity-check
+    label: check
+buildiso_menu_hd: true
+buildiso_menu_memtest: true

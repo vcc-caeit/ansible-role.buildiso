@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: Nafallo Bjälevik
+  role_name: buildiso
+  description: Build your own Ubuntu image
+  company: Volvo Cars Corporation
+  license: GPLv2
+  min_ansible_version: 2.4
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+  galaxy_tags:
+    - image
+    - iso
+    - fork
+dependencies: []

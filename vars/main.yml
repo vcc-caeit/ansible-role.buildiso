@@ -1,0 +1,8 @@
+---
+buildiso_image: "{{ buildiso_output | regex_replace(buildiso_output | basename, buildiso_input | basename) }}"
+buildiso_ppa_path: "{{ buildiso_ppafs + '/ppa' }}"
+buildiso_tempdirs:
+  - ppafs
+  - writable
+  - backing
+  - readonly

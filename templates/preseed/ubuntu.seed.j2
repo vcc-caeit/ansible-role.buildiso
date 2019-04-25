@@ -1,0 +1,8 @@
+{{ lookup('file', buildiso_readonly + '/preseed/ubuntu.seed') }}
+{% if buildiso_preseed_file is defined %}
+
+{{ lookup('file', buildiso_preseed_file) }}
+{% elif buildiso_preseed_content is defined %}
+
+{{ buildiso_preseed_content }}
+{% endif %}

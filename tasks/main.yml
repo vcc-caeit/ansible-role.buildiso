@@ -1,0 +1,130 @@
+---
+- name: Fetch ISO checksum
+  uri:
+    url: "{{ buildiso_input | dirname + '/SHA256SUMS' }}"
+    return_content: true
+  register: buildiso_csum
+
+- name: Download ISO image
+  get_url:
+    url: "{{ buildiso_input }}"
+    dest: "{{ buildiso_image }}"
+    checksum: "{{ 'sha256:' + buildiso_csum.content | regex_replace('\n', '') | \
+               regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
+               basename + '.*$', '\\1') }}"
+
+- name: Create temporary directories
+  file:
+    path: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + item }}"
+    state: directory
+  loop: "{{ buildiso_tempdirs }}"
+  register: buildiso_tempdir
+
+- name: Define directory variables
+  set_fact: "{{ 'buildiso_' + item.item }}={{ item.path }}"
+  loop: "{{ buildiso_tempdir.results | json_query('[].{item: item, path: path}') }}"
+  loop_control:
+    label: "{{ 'buildiso_' + item.item }}"
+
+- name: Handle mounting
+  block:
+    - name: Mount ISO readonly
+      command: "mount -o loop,ro {{ buildiso_image }} {{ buildiso_readonly }}"
+      args:
+        warn: false
+
+    - name: Mount ISO overlay
+      command: "mount -t aufs -o br={{ buildiso_backing }}:{{ buildiso_readonly }} none {{ buildiso_writable }}"
+      args:
+        warn: false
+
+  rescue:
+    - name: Run cleanup
+      import_tasks: cleanup.yml
+
+    - name: Rescue reached
+      fail:
+        msg: 'Rescue reached, cleaned up and failing host. Please run the play again.'
+
+- name: Find out release codename
+  stat:
+    path: "{{ buildiso_readonly + '/dists/stable' }}"
+    follow: false
+  register: buildiso_dist_check
+
+- name: Define buildiso_dist variable
+  set_fact:
+    buildiso_dist: "{{ buildiso_dist_check.stat.lnk_target }}"
+
+- name: Ensure image configuration
+  template:
+    src: "{{ item + '.j2' }}"
+    dest: "{{ buildiso_writable + '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
+  loop:
+    - preseed/ubuntu.seed
+    - isolinux/txt.cfg
+    - boot/grub/grub.cfg
+  loop_control:
+    label: "{{ '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
+  register: buildiso_template
+
+- name: Create file target directory
+  file:
+    path: "{{ buildiso_writable + '/extras/' + item }}"
+    state: directory
+  loop: "{{ buildiso_files | default([]) | json_query('[].src') | map('dirname') | list | unique }}"
+  loop_control:
+    label: "{{ '/extras/' + item }}"
+  when: buildiso_files is defined
+
+- name: Copy files to image
+  copy:
+    src: "{{ playbook_dir + '/' + item.src }}"
+    dest: "{{ buildiso_writable + '/extras/' + item.dest | default(item.src) }}"
+    mode: "{{ item.mode | default('preserve') }}"
+  loop: "{{ buildiso_files | default([]) }}"
+  loop_control:
+    label: "{{ '/extras/' + item.src }}"
+  register: buildiso_copy
+
+- name: Sync PPA to image
+  import_tasks: syncppa.yml
+  when: buildiso_ppa is defined
+
+- name: Ensure correct checksums in md5sum.txt
+  lineinfile:
+    path: "{{ buildiso_writable }}/md5sum.txt"
+    regexp: "^[a-z0-9]{32}  {{ item.path | regex_replace(buildiso_writable, '.') }}$"
+    line: >-
+      {%- if item.csum is not none -%}
+      {{ item.csum + '  ' + item.path | regex_replace(buildiso_writable, '.') }}
+      {%- else -%}
+      {{ lookup('pipe', 'md5sum ' + item.path) | regex_replace(buildiso_writable, '.') }}
+      {%- endif -%}
+    create: true
+    state: present
+  loop: >-
+    {{ lookup('filetree', buildiso_writable + '/extras/', wantlist=true) |
+    json_query('[*].{dest: src, state: state}') | difference(buildiso_copy.results |
+    json_query('[*].{dest: dest, state: state}')) | union (buildiso_copy.results) | union(buildiso_template.results) |
+    json_query('[?state==`file`].{path: dest, csum: md5sum}') | unique }}
+  loop_control:
+    label: "{{ item.path | regex_replace(buildiso_writable) }}"
+
+- name: Create ISO image
+  command: >-
+    mkisofs -D -r -V "{{ buildiso_name | default('Ubuntu') }}" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat
+    -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot
+    -o {{ buildiso_output }} {{ buildiso_writable }}
+
+- name: Make image UEFI bootable
+  command: "isohybrid -t 0 -u {{ buildiso_output }}"
+
+- name: Ensure correct manifest file
+  fetch:
+    src: "{{ buildiso_writable }}/casper/filesystem.manifest"
+    dest: "{{ buildiso_output | splitext | first }}.manifest"
+    flat: true
+
+- name: Run cleanup
+  import_tasks: cleanup.yml
