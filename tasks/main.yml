@@ -12,8 +12,9 @@
     checksum: "{{ 'sha256:' + buildiso_download_checksum.content | regex_replace('\n', '') | \
                regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
                basename + '.*$', '\\1') }}"
+  register: buildiso_download_iso
 
-- name: Create temporary directories
+- name: Ensure temporary directories
   file:
     path: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + buildiso_tempdir }}"
     state: directory
@@ -33,27 +34,42 @@
     loop_var: buildiso_dirvar
     label: "{{ 'buildiso_' + buildiso_dirvar.dir }}"
 
-- name: Handle mounting
-  block:
-    - name: Mount ISO readonly
-      command: "mount -o loop,ro {{ buildiso_image }} {{ buildiso_readonly }}"
-      args:
-        warn: false
+- name: Enumerate current mounts
+  setup:
+    gather_subset:
+      - '!min'
+      - hardware
+    filter: ansible_mounts
 
-    - name: Mount ISO overlay
-      command: "mount -t aufs -o br={{ buildiso_backing }}:{{ buildiso_readonly }} none {{ buildiso_writable }}"
-      args:
-        warn: false
+- name: Unmount directories when ISO file changed
+  command: "{{ 'umount ' + buildiso_umount | splitext | first + '.writable ' + buildiso_umount }}"
+  args:
+    warn: false
+    removes: "{{ buildiso_readonly + '/.disk/info' }}"
+  loop: "{{ ansible_mounts | json_query('[?mount==`' + buildiso_readonly + '`].mount') }}"
+  loop_control:
+    loop_var: buildiso_umount
+    label: "{{ buildiso_readonly | splitext | first + '.writable, ' + buildiso_umount }}"
+  when:
+    - buildiso_download_iso is changed
 
-  rescue:
-    - name: Run cleanup
-      import_tasks: cleanup.yml
+- name: Ensure directories are mounted
+  command: "{{ 'mount ' + buildiso_mount.args + ' ' + buildiso_mount.src + ' ' + buildiso_mount.dest }}"
+  args:
+    warn: false
+    creates: "{{ buildiso_mount.dest + '/.disk/info' }}"
+  loop:
+    - src: "{{ buildiso_image }}"
+      dest: "{{ buildiso_readonly }}"
+      args: '-o loop,ro'
+    - src: none
+      dest: "{{ buildiso_writable }}"
+      args: "{{ '-t aufs -o br=' + buildiso_backing + ':' + buildiso_readonly }}"
+  loop_control:
+    loop_var: buildiso_mount
+    label: "{{ buildiso_mount.dest }}"
 
-    - name: Rescue reached
-      fail:
-        msg: 'Rescue reached, cleaned up and failing host. Please run the play again.'
-
-- name: Find out release codename
+- name: Enumerate release codename
   stat:
     path: "{{ buildiso_readonly + '/dists/stable' }}"
     follow: false
@@ -132,6 +148,3 @@
     src: "{{ buildiso_writable }}/casper/filesystem.manifest"
     dest: "{{ buildiso_output | splitext | first }}.manifest"
     flat: true
-
-- name: Run cleanup
-  import_tasks: cleanup.yml
