@@ -22,12 +22,13 @@
     - /etc/apt/trusted.gpg.d/
     - "{{ '/ppa' + buildiso_ppa_dist }}"
 
-- name: Download and create repo key
-  command: >-
-    apt-key --keyring {{ buildiso_ppafs + '/etc/apt/trusted.gpg.d/' + buildiso_ppa_name + '.gpg' }}
-    adv --keyserver keyserver.ubuntu.com --recv-key {{ buildiso_ppa_info.json.signing_key_fingerprint }}
+- name: Ensure repository keyring
+  apt_key:
+    id: "{{ buildiso_ppa_info.json.signing_key_fingerprint }}"
+    keyring: "{{ buildiso_ppafs + '/etc/apt/trusted.gpg.d/' + buildiso_ppa_name + '.gpg' }}"
+    keyserver: keyserver.ubuntu.com
 
-- name: Ensure repository file
+- name: Ensure repository sources.list
   copy:
     content: "deb [arch=amd64] file:///ppa/ {{ buildiso_dist }} main"
     dest: "{{ buildiso_ppafs + '/etc/apt/sources.list.d/' + buildiso_ppa_name + '.list' }}"
