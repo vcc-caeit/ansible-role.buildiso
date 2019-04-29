@@ -5,6 +5,7 @@
     buildiso_ppa_url: "{{ buildiso_ppa | regex_replace('ppa:([a-z0-9-]+)/([a-z0-9-]+)', 'http://ppa.launchpad.net/\\1/\\2/ubuntu') }}"
     buildiso_ppa_name: "{{ buildiso_ppa | regex_replace('ppa:[a-z0-9-]+/([a-z0-9-]+)', '\\1') }}"
     buildiso_ppa_dist: "{{ '/dists/' + buildiso_dist + '/' }}"
+    buildiso_ppa_path: "{{ buildiso_ppafs + '/ppa' }}"
 
 - name: Fetch PPA information
   uri:
