@@ -3,28 +3,35 @@
   uri:
     url: "{{ buildiso_input | dirname + '/SHA256SUMS' }}"
     return_content: true
-  register: buildiso_csum
+  register: buildiso_download_checksum
 
 - name: Download ISO image
   get_url:
     url: "{{ buildiso_input }}"
     dest: "{{ buildiso_image }}"
-    checksum: "{{ 'sha256:' + buildiso_csum.content | regex_replace('\n', '') | \
+    checksum: "{{ 'sha256:' + buildiso_download_checksum.content | regex_replace('\n', '') | \
                regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
                basename + '.*$', '\\1') }}"
 
 - name: Create temporary directories
   file:
-    path: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + item }}"
+    path: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + buildiso_tempdir }}"
     state: directory
-  loop: "{{ buildiso_tempdirs }}"
-  register: buildiso_tempdir
+  loop:
+    - backing
+    - readonly
+    - writable
+  loop_control:
+    loop_var: buildiso_tempdir
+    label: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + buildiso_tempdir }}"
+  register: buildiso_tempdirs
 
 - name: Define directory variables
-  set_fact: "{{ 'buildiso_' + item.item }}={{ item.path }}"
-  loop: "{{ buildiso_tempdir.results | json_query('[].{item: item, path: path}') }}"
+  set_fact: "{{ 'buildiso_' + buildiso_dirvar.dir }}={{ buildiso_dirvar.path }}"
+  loop: "{{ buildiso_tempdirs.results | json_query('[].{dir: buildiso_tempdir, path: path}') }}"
   loop_control:
-    label: "{{ 'buildiso_' + item.item }}"
+    loop_var: buildiso_dirvar
+    label: "{{ 'buildiso_' + buildiso_dirvar.dir }}"
 
 - name: Handle mounting
   block:
