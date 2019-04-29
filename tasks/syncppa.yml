@@ -63,11 +63,13 @@
          map(attribute='item') | list | join('|') + ')/[a-zA-Z0-9-_\\.]*)') | unique }}"
   loop_control:
     label: "[u'{{ item.0 }}', u'{{ item.1 }}']"
+  register: buildiso_ppa_syncmeta
   when: ('Packages' != item.1 | basename) and ('Translation-en' != item.1 | basename) and ('Sources' != item.1 | basename)
 
 - name: Read Packages files
   command: "zgrep -h -e ^Filename: -e ^SHA256: {{ lookup('pipe', 'find ' + buildiso_ppa_path + ' -name Packages.gz') }}"
   register: buildiso_ppa_pool
+  changed_when: false
 
 - name: Ensure pool directories
   file:
@@ -88,10 +90,12 @@
 
 - name: Build squashfs image
   command: "mksquashfs {{ buildiso_ppafs + ' ' + buildiso_writable + '/casper/ppa.squashfs' }}"
+  when: buildiso_ppa_syncmeta is changed
 
-- name: Append checksum of squashfs image to md5sum.txt
+- name: Ensure squashfs image checksum in md5sum.txt
   lineinfile:
     path: "{{ buildiso_writable }}/md5sum.txt"
     line: "{{ lookup('pipe', 'md5sum ' + buildiso_writable + '/casper/ppa.squashfs') | regex_replace(buildiso_writable, '.') }}"
     create: true
     state: present
+  register: buildiso_ppa_checksum
