@@ -95,7 +95,7 @@
   register: buildiso_copy
 
 - name: Sync PPA to image
-  import_tasks: syncppa.yml
+  include_tasks: syncppa.yml
   when: buildiso_ppa is defined
 
 - name: Ensure correct checksums in md5sum.txt
