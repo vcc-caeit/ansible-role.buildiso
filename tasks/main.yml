@@ -148,3 +148,9 @@
     src: "{{ buildiso_writable }}/casper/filesystem.manifest"
     dest: "{{ buildiso_output | splitext | first }}.manifest"
     flat: true
+
+- name: Run cleanup tasks
+  include_tasks: cleanup.yml
+  tags:
+    - never
+    - cleanup

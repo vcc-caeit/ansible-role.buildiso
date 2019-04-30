@@ -64,6 +64,11 @@ The `buildiso_name` variable sets the volume ID when generating the ISO file.
 When you require extra packages, this role provides support for syncing a PPA (Personal Package Archive) if the `buildiso_ppa` variable is set.
 It uses the standard `ppa:team/ppa` structure. See the example playbook to see how you would synchronise the Ansible Stable PPA.
 
+Role Tags
+--------------
+
+If you specify the `cleanup` tag when running `ansible-playbook`, we will unmount and remove all the temporary directories.
+
 Example Playbook
 ----------------
 

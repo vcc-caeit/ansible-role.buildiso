@@ -1,0 +1,20 @@
+---
+- name: Unmount directories
+  command: "{{ 'umount ' + buildiso_writable + ' ' + buildiso_readonly }}"
+  args:
+    warn: false
+    removes: "{{ buildiso_readonly + '/.disk/info' }}"
+  tags: always
+
+- name: Remove temporary directories
+  file:
+    path: "{{ buildiso_rmdir }}"
+    state: absent
+  loop:
+    - "{{ buildiso_ppafs }}"
+    - "{{ buildiso_backing }}"
+    - "{{ buildiso_readonly }}"
+    - "{{ buildiso_writable }}"
+  loop_control:
+    loop_var: buildiso_rmdir
+  tags: always
