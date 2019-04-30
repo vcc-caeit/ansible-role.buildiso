@@ -16,23 +16,14 @@
 
 - name: Ensure temporary directories
   file:
-    path: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + buildiso_tempdir }}"
+    path: "{{ buildiso_mkdir }}"
     state: directory
   loop:
-    - backing
-    - readonly
-    - writable
+    - "{{ buildiso_backing }}"
+    - "{{ buildiso_readonly }}"
+    - "{{ buildiso_writable }}"
   loop_control:
-    loop_var: buildiso_tempdir
-    label: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.' + buildiso_tempdir }}"
-  register: buildiso_tempdirs
-
-- name: Define directory variables
-  set_fact: "{{ 'buildiso_' + buildiso_dirvar.dir }}={{ buildiso_dirvar.path }}"
-  loop: "{{ buildiso_tempdirs.results | json_query('[].{dir: buildiso_tempdir, path: path}') }}"
-  loop_control:
-    loop_var: buildiso_dirvar
-    label: "{{ 'buildiso_' + buildiso_dirvar.dir }}"
+    loop_var: buildiso_mkdir
 
 - name: Enumerate current mounts
   setup:
