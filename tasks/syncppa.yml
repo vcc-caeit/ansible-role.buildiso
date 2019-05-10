@@ -87,10 +87,11 @@
          zip(buildiso_ppa_pool.stdout | regex_findall('SHA256: ([a-z0-9]{64})')) | list | unique }}"
   loop_control:
     label: "[u'{{ item.1 }}', u'{{ item.0 }}']"
+  register: buildiso_ppa_syncpool
 
 - name: Build squashfs image
   command: "mksquashfs {{ buildiso_ppafs + ' ' + buildiso_writable + '/casper/ppa.squashfs' }}"
-  when: buildiso_ppa_syncmeta is changed
+  when: buildiso_ppa_syncmeta is changed or buildiso_ppa_syncpool is changed
 
 - name: Ensure squashfs image checksum in md5sum.txt
   lineinfile:
