@@ -113,7 +113,7 @@
       {%- if item.csum is not none -%}
       {{ item.csum + '  ' + item.path | regex_replace(buildiso_writable, '.') }}
       {%- else -%}
-      {{ lookup('pipe', 'md5sum ' + item.path) | regex_replace(buildiso_writable, '.') }}
+      {{ lookup('pipe', 'md5sum "' + item.path + '"') | regex_replace(buildiso_writable, '.') }}
       {%- endif -%}
     create: true
     state: present
