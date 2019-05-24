@@ -61,6 +61,8 @@ The `buildiso_name` variable sets the volume ID when generating the ISO file.
 
     buildiso_name: Ubuntu
 
+If something went wrong, but the role will not pick up enough changes to actually build the images, you can now define `buildiso_forcebuild` to make it always run the build tasks.
+
 When you require extra packages, this role provides support for syncing a PPA (Personal Package Archive) if the `buildiso_ppa` variable is set.
 It uses the standard `ppa:team/ppa` structure. See the example playbook to see how you would synchronise the Ansible Stable PPA.
 
