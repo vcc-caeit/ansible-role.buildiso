@@ -91,7 +91,7 @@
 
 - name: Build squashfs image
   command: "mksquashfs {{ buildiso_ppafs + ' ' + buildiso_writable + '/casper/ppa.squashfs' }}"
-  when: buildiso_ppa_syncmeta is changed or buildiso_ppa_syncpool is changed
+  when: buildiso_ppa_syncmeta is changed or buildiso_ppa_syncpool is changed or buildiso_forcebuild is defined
 
 - name: Ensure squashfs image checksum in md5sum.txt
   lineinfile:

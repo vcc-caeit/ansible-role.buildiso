@@ -141,7 +141,8 @@
     label: "{{ buildiso_create.cmd }}"
   when: (buildiso_ppa_checksum is defined and buildiso_ppa_checksum is changed) or
          buildiso_checksum is changed or
-         buildiso_download_iso is changed
+         buildiso_download_iso is changed or
+         buildiso_forcebuild is defined
 
 - name: Ensure correct manifest file
   fetch:
