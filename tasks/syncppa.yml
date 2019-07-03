@@ -30,7 +30,7 @@
 
 - name: Ensure repository sources.list
   copy:
-    content: "deb [arch=amd64] file:///ppa/ {{ buildiso_dist }} main"
+    content: "deb [arch=amd64] file:///ppa/ {{ buildiso_dist }} main main/debian-installer"
     dest: "{{ buildiso_ppafs + '/etc/apt/sources.list.d/' + buildiso_ppa_name + '.list' }}"
 
 - name: Sync Release files
@@ -48,6 +48,7 @@
     state: directory
   loop:
     - binary-amd64
+    - debian-installer/binary-amd64
     - i18n
   loop_control:
     label: "{{ 'main/' + item }}"
@@ -69,6 +70,7 @@
 - name: Read Packages files
   command: "zgrep -h -e ^Filename: -e ^SHA256: {{ lookup('pipe', 'find ' + buildiso_ppa_path + ' -name Packages.gz') }}"
   register: buildiso_ppa_pool
+  failed_when: false
   changed_when: false
 
 - name: Ensure pool directories
