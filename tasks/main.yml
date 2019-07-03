@@ -127,18 +127,15 @@
   register: buildiso_checksum
 
 - name: Create ISO image and make UEFI bootable
-  command: "{{ buildiso_create.cmd + ' ' + buildiso_create.args }}"
+  command: "{{ buildiso_create }}"
   loop:
-    - cmd: mkisofs
-      args: >-
-        -D -r -V "{{ buildiso_name | default('Ubuntu') }}" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat
-        -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot
-        -o {{ buildiso_output }} {{ buildiso_writable }}
-    - cmd: isohybrid
-      args: "-t 0 -u {{ buildiso_output }}"
+    - mkisofs -D -r -V "{{ buildiso_name | default('Ubuntu') }}" -cache-inodes -J -l -b isolinux/isolinux.bin
+      -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e boot/grub/efi.img
+      -no-emul-boot -o {{ buildiso_output }} {{ buildiso_writable }}
+    - isohybrid -t 0 -u "{{ buildiso_output }}"
   loop_control:
     loop_var: buildiso_create
-    label: "{{ buildiso_create.cmd }}"
+    label: "{{ buildiso_create | regex_search('\\w+') }}"
   when: (buildiso_ppa_checksum is defined and buildiso_ppa_checksum is changed) or
          buildiso_checksum is changed or
          buildiso_download_iso is changed or
