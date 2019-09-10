@@ -3,6 +3,6 @@
 menuentry "{{ entry.name }}" {
 	set gfxpayload=keep
 	linux	/casper/vmlinuz {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %} boot=casper{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %} quiet splash{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %} ---
-	initrd	{{ lookup('file', buildiso_readonly + '/boot/grub/grub.cfg') | regex_search("\/[a-z0-9]*\/initrd(\.[a-z0-9]*)?$", multiline=true) }}
+	initrd	/casper/initrd
 }
 {% endfor %}
