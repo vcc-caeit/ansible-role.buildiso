@@ -2,7 +2,7 @@
 {% for entry in buildiso_menu %}
 menuentry "{{ entry.name }}" {
 	set gfxpayload=keep
-	linux	/casper/vmlinuz {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %} boot=casper{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %} quiet splash{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %} ---
+	linux	/casper/vmlinuz {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %}{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %} quiet splash{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %}{% if entry.label is defined and 'nomodeset' in entry.label %} nomodeset{% endif %} ---
 	initrd	/casper/initrd
 }
 {% endfor %}
