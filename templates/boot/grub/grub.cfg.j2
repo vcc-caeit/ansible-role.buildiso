@@ -1,4 +1,4 @@
-{{ lookup('pipe', 'grep -m1 -B100 ^menuentry ' + buildiso_readonly + '/boot/grub/grub.cfg|head -n-1') }}
+{{ buildiso_readfiles.results | to_json | from_json | json_query('[?item==`/boot/grub/grub.cfg`].content') | b64decode | regex_replace('\nmenuentry(?:.*\n)+') }}
 {% for entry in buildiso_menu %}
 menuentry "{{ entry.name }}" {
 	set gfxpayload=keep

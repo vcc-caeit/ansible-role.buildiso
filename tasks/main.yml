@@ -70,14 +70,22 @@
   set_fact:
     buildiso_dist: "{{ buildiso_dist_check.stat.lnk_target }}"
 
+- name: Read original files
+  slurp:
+    src: "{{ buildiso_readonly + item }}"
+  loop:
+    - /boot/grub/grub.cfg
+    - /preseed/ubuntu.seed
+  register: buildiso_readfiles
+
 - name: Ensure image configuration
   template:
     src: "{{ item + '.j2' }}"
     dest: "{{ buildiso_writable + '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
   loop:
-    - preseed/ubuntu.seed
-    - isolinux/txt.cfg
     - boot/grub/grub.cfg
+    - isolinux/txt.cfg
+    - preseed/ubuntu.seed
   loop_control:
     label: "{{ '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
   register: buildiso_template
