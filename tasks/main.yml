@@ -10,8 +10,8 @@
     url: "{{ buildiso_input }}"
     dest: "{{ buildiso_image }}"
     checksum: "{{ 'sha256:' + buildiso_download_checksum.content | regex_replace('\n', '') | \
-               regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
-               basename + '.*$', '\\1') }}"
+                  regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
+                  basename + '.*$', '\\1') }}"
   register: buildiso_download_iso
 
 - name: Ensure temporary directories
