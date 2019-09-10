@@ -95,10 +95,19 @@
   command: "mksquashfs {{ buildiso_ppafs + ' ' + buildiso_writable + '/casper/ppa.squashfs -noappend' }}"
   when: buildiso_ppa_syncmeta is changed or buildiso_ppa_syncpool is changed or buildiso_forcebuild is defined
 
+- name: Gather MD5SUM for squashfs image
+  stat:
+    path: "{{ buildiso_writable + '/casper/ppa.squashfs' }}"
+    get_mime: false
+    get_checksum: true
+    get_attributes: false
+    checksum_algorithm: md5
+  register: buildiso_ppa_squashfs
+
 - name: Ensure squashfs image checksum in md5sum.txt
   lineinfile:
     path: "{{ buildiso_writable }}/md5sum.txt"
-    line: "{{ lookup('pipe', 'md5sum ' + buildiso_writable + '/casper/ppa.squashfs') | regex_replace(buildiso_writable, '.') }}"
+    line: "{{ buildiso_ppa_squashfs.stat.checksum }}  ./casper/ppa.squashfs"
     create: true
     state: present
   register: buildiso_ppa_checksum
