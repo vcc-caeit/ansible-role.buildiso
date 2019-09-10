@@ -4,7 +4,7 @@ default {{ (buildiso_menu | list | first).label }}
 label {{ entry.label }}
   menu label ^{{ entry.name }}
   kernel /casper/vmlinuz
-  append {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %} boot=casper{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %}{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %} initrd=/casper/initrd quiet splash ---
+  append {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %}{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %}{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %} initrd=/casper/initrd quiet splash{% if 'nomodeset' in entry.label %} nomodeset{% endif %} ---
 {%   endif %}
 {% endfor %}
 {% if buildiso_menu_memtest %}
