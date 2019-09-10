@@ -105,25 +105,35 @@
   include_tasks: syncppa.yml
   when: buildiso_ppa is defined
 
-- name: Ensure correct checksums in md5sum.txt
+- name: Enumerate extra files
+  find:
+    paths: "{{ buildiso_writable + '/extras/' }}"
+    recurse: true
+    file_type: file
+  register: buildiso_extras
+
+- name: Gather MD5SUM for file(s)
+  stat:
+    path: "{{ item }}"
+    get_mime: false
+    get_checksum: true
+    get_attributes: false
+    checksum_algorithm: md5
+  loop: "{{ buildiso_template.results | json_query('[*].{path: dest}') | union(buildiso_extras.files) | json_query('[*].path') }}"
+  loop_control:
+    label: "{{ item | regex_replace(buildiso_writable) }}"
+  register: buildiso_extras
+
+- name: Ensure MD5SUM in md5sum.txt
   lineinfile:
-    path: "{{ buildiso_writable }}/md5sum.txt"
-    regexp: "^[a-z0-9]{32}  {{ item.path | regex_replace(buildiso_writable, '.') }}$"
-    line: >-
-      {%- if item.csum is not none -%}
-      {{ item.csum + '  ' + item.path | regex_replace(buildiso_writable, '.') }}
-      {%- else -%}
-      {{ lookup('pipe', 'md5sum "' + item.path + '"') | regex_replace(buildiso_writable, '.') }}
-      {%- endif -%}
+    path: "{{ buildiso_writable + '/md5sum.txt' }}"
+    regexp: "{{ '^[a-z0-9]{32}  ' + item.file + '$' }}"
+    line: "{{ item.md5sum + '  ' + item.file }}"
     create: true
     state: present
-  loop: >-
-    {{ lookup('filetree', buildiso_writable + '/extras/', wantlist=true) |
-    json_query('[*].{dest: src, state: state}') | difference(buildiso_copy.results |
-    json_query('[*].{dest: dest, state: state}')) | union (buildiso_copy.results) | union(buildiso_template.results) |
-    json_query('[?state==`file`].{path: dest, csum: md5sum}') | unique }}
+  loop: "{{ buildiso_extras | json_query('results[*].stat | [].{file: path, md5sum: checksum}') | regex_replace(buildiso_writable, '.') }}"
   loop_control:
-    label: "{{ item.path | regex_replace(buildiso_writable) }}"
+    label: "[u'{{ item.md5sum }}', u'{{ item.file }}']"
   register: buildiso_checksum
 
 - name: Create ISO image and make UEFI bootable
