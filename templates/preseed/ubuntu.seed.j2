@@ -1,8 +1,2 @@
 {{ buildiso_readfiles.results | to_json | from_json | json_query('[?item==`/preseed/ubuntu.seed`].content') | b64decode }}
-{% if buildiso_preseed_file is defined %}
-
-{{ lookup('file', buildiso_preseed_file) }}
-{% elif buildiso_preseed_content is defined %}
-
-{{ buildiso_preseed_content }}
-{% endif %}
+{{ buildiso_preseed_content if buildiso_preseed_content is defined }}
