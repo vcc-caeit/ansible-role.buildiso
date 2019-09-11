@@ -20,11 +20,10 @@ Which Ubuntu image to fetch and customise, and where to place the resulting imag
     buildiso_output: custom.iso
     buildiso_image: disco-desktop-amd64.iso
 
-Select which `/preseed/<filename>.seed` to modify by setting `buildiso_preseed`. You could change this to a different one, but you still need to alter your `buildiso_menu` to make use of it.
-To include additional your own content for the preseed file, use the variable `buildiso_preseed_content`. The content of `preseed/ubuntu.seed` will always be included first in the file and
-you need to specify variables again to override them.
+Select which `/preseed/<filename>.seed` to modify by setting `buildiso_preseed_name`. You could change this to a different one, but you still need to alter your `buildiso_menu` to make use of it.
+To include additional your own content for the preseed file, use the variable `buildiso_preseed_content`. The content of the file `/preseed/ubuntu.seed` is default.
 
-    buildiso_preseed: ubuntu
+    buildiso_preseed_name: ubuntu
     buildiso_preseed_content: None
 
 The boot menu of the image can be set to alternative options. There is no timeout in making the choice, and the default entry will be the default selection.
