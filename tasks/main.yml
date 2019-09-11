@@ -81,13 +81,13 @@
 - name: Ensure image configuration
   template:
     src: "{{ item + '.j2' }}"
-    dest: "{{ buildiso_writable + '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
+    dest: "{{ buildiso_writable + '/' + item | regex_replace('ubuntu', buildiso_preseed_name | default('ubuntu')) }}"
   loop:
     - boot/grub/grub.cfg
     - isolinux/txt.cfg
     - preseed/ubuntu.seed
   loop_control:
-    label: "{{ '/' + item | regex_replace('ubuntu', buildiso_preseed | default('ubuntu')) }}"
+    label: "{{ '/' + item | regex_replace('ubuntu', buildiso_preseed_name | default('ubuntu')) }}"
   register: buildiso_template
 
 - name: Create file target directory
