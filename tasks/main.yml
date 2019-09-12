@@ -8,7 +8,7 @@
 - name: Download ISO image
   get_url:
     url: "{{ buildiso_input }}"
-    dest: "{{ buildiso_image }}"
+    dest: "{{ './' + buildiso_image }}"
     checksum: "{{ 'sha256:' + buildiso_download_checksum.content | regex_replace('\n', '') | \
                   regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
                   basename + '.*$', '\\1') }}"
