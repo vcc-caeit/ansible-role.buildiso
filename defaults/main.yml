@@ -1,6 +1,6 @@
 ---
 buildiso_input: http://cdimage.ubuntu.com/daily-live/current/eoan-desktop-amd64.iso
-buildiso_output: custom.iso
+buildiso_output: ./custom.iso
 
 buildiso_menu:
   - name: Try Ubuntu without installing
