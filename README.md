@@ -1,5 +1,5 @@
 Ansible Role: buildiso
-=========
+======================
 
 This role makes remastering Ubuntu images easier. There is support for copying your own files to the installation media, and to sync a Personal Package Archive (PPA) from Launchpad.
 
@@ -64,7 +64,7 @@ When you require extra packages, this role provides support for syncing a PPA (P
 It uses the standard `ppa:team/ppa` structure. See the example playbook to see how you would synchronise the Ansible Stable PPA.
 
 Role Tags
---------------
+---------
 
 If you specify the `cleanup` tag when running `ansible-playbook`, we will unmount and remove all the temporary directories.
 
@@ -74,7 +74,7 @@ Example Playbook
     - hosts: localhost
       become: true
       roles:
-        - { role: vcc-caeit.build_iso, buildiso_ppa: ppa:ansible/ansible }
+        - { role: vcc_caeit.build_iso, buildiso_ppa: ppa:ansible/ansible }
 
 License
 -------
