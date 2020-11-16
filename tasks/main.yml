@@ -106,7 +106,7 @@
     mode: "{{ item.mode | default('preserve') }}"
   loop: "{{ buildiso_files | default([]) }}"
   loop_control:
-    label: "{{ '/extras/' + item.src }}"
+    label: "{{ '/extras/' + item.dest | default(item.src) }}"
   register: buildiso_copy
 
 - name: Sync PPA to image
@@ -153,7 +153,7 @@
     - isohybrid -t 0 -u "{{ buildiso_output }}"
   loop_control:
     loop_var: buildiso_create
-    label: "{{ buildiso_create | regex_search('\\w+') }}"
+    label: "{{ buildiso_create | regex_search('\\w+') + ' ... ' + buildiso_output }}"
   when: (buildiso_ppa_checksum is defined and buildiso_ppa_checksum is changed) or
          buildiso_checksum is changed or
          buildiso_download_iso is changed or
