@@ -1,28 +1,18 @@
 ---
-buildiso_input: http://cdimage.ubuntu.com/daily-live/current/eoan-desktop-amd64.iso
+buildiso_arch: amd64
+
+buildiso_input: "http://releases.ubuntu.com/{{ ansible_distribution_release }}/"
+
+buildiso_pattern: ".*-{{ buildiso_type }}-{{ buildiso_arch }}.iso$"
+
 buildiso_output: ./custom.iso
 
-buildiso_menu:
-  - name: Try Ubuntu without installing
-    label: live
-    preseed: ubuntu
-  - name: Try Ubuntu without installing (safe graphics)
-    label: live-nomodeset
-    preseed: ubuntu
-  - name: Install Ubuntu
-    cmdline: only-ubiquity
-    label: live-install
-    preseed: ubuntu
-  - name: Install Ubuntu (safe graphics)
-    cmdline: only-ubiquity
-    label: live-install-nomodeset
-    preseed: ubuntu
-  - name: OEM install (for manufacturers)
-    cmdline: only-ubiquity
-    pkgconf: oem-config/enable=true
-    preseed: ubuntu
-  - name: Check disc for defects
-    cmdline: integrity-check
-    label: check
-buildiso_menu_hd: true
-buildiso_menu_memtest: true
+buildiso_type: desktop
+
+# Variables used when generating the image
+buildiso_boot: "{{ 'boot/grub/i386-pc/eltorito.img' if ansible_distribution_version is version('21.10', 'ge') else 'isolinux/isolinux.bin' }}"
+buildiso_cat: "{{ 'boot.catalog' if ansible_distribution_version is version('21.10', 'ge') else 'isolinux/boot.cat' }}"
+buildiso_efi: "{{ '/usr/share/cd-boot-images-amd64/images/boot/grub/efi.img' if ansible_distribution_version is version('21.10', 'ge')
+                   else buildiso_writable + '/boot/grub/efi.img' }}"
+buildiso_grub: "{{ '/usr/share/cd-boot-images-amd64/images/boot/grub/i386-pc/boot_hybrid.img' if ansible_distribution_version is version('21.10', 'ge')
+                    else False }}"

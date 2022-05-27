@@ -1,6 +1,12 @@
 ---
-buildiso_image: "{{ buildiso_output | regex_replace(buildiso_output | basename, buildiso_input | basename) }}"
-buildiso_ppafs: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.ppafs' }}"
-buildiso_backing: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.backing' }}"
-buildiso_readonly: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.readonly' }}"
-buildiso_writable: "{{ '/tmp/' + buildiso_output | basename | splitext | first + '.writable' }}"
+_buildiso_pattern: "{{ (buildiso_input | basename) | default(buildiso_pattern, true) }}"
+
+buildiso_backing: "/tmp/{{ buildiso_output | basename | regex_replace('iso$', 'backing') }}"
+
+buildiso_readonly: "/tmp/{{ buildiso_output | basename | regex_replace('iso$', 'readonly') }}"
+
+buildiso_syncppa: "/tmp/{{ buildiso_output | basename | regex_replace('iso$', 'syncppa') }}"
+
+buildiso_workdir: "/tmp/{{ buildiso_output | basename | regex_replace('iso$', 'workdir') }}"
+
+buildiso_writable: "/tmp/{{ buildiso_output | basename | regex_replace('iso$', 'writable') }}"

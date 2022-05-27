@@ -1,8 +1,37 @@
-{{ buildiso_readfiles.results | to_json | from_json | json_query('[?item==`/boot/grub/grub.cfg`].content') | b64decode | regex_replace('\nmenuentry(?:.*\n)+') }}
-{% for entry in buildiso_menu %}
-menuentry "{{ entry.name }}" {
-	set gfxpayload=keep
-	linux	/casper/vmlinuz {% if entry.preseed is defined %} file=/cdrom/preseed/{{ entry.preseed }}.seed{% endif %}{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %} quiet splash{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %}{% if entry.label is defined and 'nomodeset' in entry.label %} nomodeset{% endif %} ---
-	initrd	/casper/initrd
+
+if loadfont /boot/grub/font.pf2 ; then
+  set gfxmode=auto
+  insmod efi_gop
+  insmod efi_uga
+  insmod gfxterm
+  terminal_output gfxterm
+fi
+
+set menu_color_normal=white/black
+set menu_color_highlight=black/light-gray
+
+set timeout={{ buildiso_bootmenu_timeout | default(5) }}
+{% for entry in buildiso_bootmenu %}
+{%   if entry.command is undefined %}
+menuentry "{{ entry.name.replace('^', '') }}" {
+  set gfxpayload=keep
+  linux   {{ entry.kernel | default('/casper/vmlinuz') }} {{ entry.preseed | default('file=/cdrom/preseed/ubuntu.seed') }}{% if entry.cmdline is defined %} {{ entry.cmdline }}{% endif %} quiet splash{% if entry.label is defined and 'nomodeset' in entry.label %} nomodeset{% endif %}{% if entry.pkgconf is defined %} {{ entry.pkgconf }}{% endif %} ---
+  initrd  {{ entry.initrd | default('/casper/initrd') }}
 }
+{%   endif %}
 {% endfor %}
+{% if buildiso_bootmenu_harddisk | default(True) or buildiso_bootmenu_bios | default(True) %}
+grub_platform
+if [ "$grub_platform" = "efi" ]; then
+{%   if buildiso_bootmenu_harddisk | default(True) %}
+menuentry 'Boot from next volume' {
+  exit 1
+}
+{%   endif %}
+{%   if buildiso_bootmenu_bios | default(True) %}
+menuentry 'UEFI Firmware Settings' {
+  fwsetup
+}
+{%   endif %}
+fi
+{% endif %}

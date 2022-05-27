@@ -1,172 +1,286 @@
 ---
-- name: Fetch ISO checksum
-  uri:
-    url: "{{ buildiso_input | dirname + '/SHA256SUMS' }}"
+- name: Enumerate source image
+  ansible.builtin.uri:
+    url: "{{ buildiso_input | dirname }}/SHA256SUMS"
     return_content: true
-  register: buildiso_download_checksum
+  register: _buildiso_sha256
+  tags: always
+  become: false
 
-- name: Download ISO image
-  get_url:
-    url: "{{ buildiso_input }}"
-    dest: "{{ buildiso_image }}"
-    checksum: "{{ 'sha256:' + buildiso_download_checksum.content | regex_replace('\n', '') | \
-                  regex_replace('^.*([a-z0-9]{64})\\ \\*' + buildiso_image | \
-                  basename + '.*$', '\\1') }}"
-  register: buildiso_download_iso
+- name: Set image related facts
+  set_fact:
+    buildiso_src:
+      image: "{{ _buildiso_sha256.content | regex_search('^[a-f0-9]{64}\\ \\*(' + _buildiso_pattern + ')', '\\1', multiline=True) | default([], True) | join }}"
+      sha256: "{{ _buildiso_sha256.content | regex_search('^([a-f0-9]{64})\\ \\*' + _buildiso_pattern, '\\1', multiline=True) | default([], True) | join }}"
+  tags: always
+  become: false
+
+- name: Verify download information
+  ansible.builtin.assert:
+    that:
+      - buildiso_src.image
+      - buildiso_src.sha256
+    quiet: true
+  tags: always
+  become: false
+
+- name: Ensure source image up-to-date
+  ansible.builtin.get_url:
+    url: "{{ buildiso_input | dirname }}/{{ buildiso_src.image }}"
+    dest: "{{ buildiso_output | regex_replace(buildiso_output | basename, buildiso_src.image) }}"
+    checksum: "sha256:{{ buildiso_src.sha256 }}"
+  register: buildiso_download
+  when: buildiso_src.image
+  become: false
 
 - name: Ensure temporary directories
-  file:
-    path: "{{ buildiso_mkdir }}"
+  ansible.builtin.file:
+    path: "{{ item }}"
     state: directory
   loop:
     - "{{ buildiso_backing }}"
     - "{{ buildiso_readonly }}"
+    - "{{ buildiso_syncppa }}"
+    - "{{ buildiso_workdir }}"
     - "{{ buildiso_writable }}"
-  loop_control:
-    loop_var: buildiso_mkdir
+  become: true
 
 - name: Enumerate current mounts
-  setup:
-    gather_subset:
-      - '!min'
-      - hardware
-    filter: ansible_mounts
+  ansible.builtin.command: findmnt --list --real -n -o TARGET
+  register: buildiso_mounts
+  changed_when: false
+  become: false
+  tags: always
 
-- name: Unmount directories when ISO file changed
-  command: "{{ 'umount ' + buildiso_umount | splitext | first + '.writable ' + buildiso_umount }}"
+- name: Unmount directories when source image changed
+  ansible.builtin.command: "umount {{ buildiso_writable }} {{ buildiso_readonly }}"
   args:
     warn: false
-    removes: "{{ buildiso_readonly + '/.disk/info' }}"
-  loop: "{{ ansible_mounts | json_query('[?mount==`' + buildiso_readonly + '`].mount') }}"
-  loop_control:
-    loop_var: buildiso_umount
-    label: "{{ buildiso_readonly | splitext | first + '.writable, ' + buildiso_umount }}"
+    removes: "{{ buildiso_readonly }}/.disk/info"
   when:
-    - buildiso_download_iso is changed
+    - buildiso_download is changed
+    - buildiso_readonly in buildiso_mounts.stdout_lines
+  become: true
 
 - name: Ensure directories are mounted
-  command: "{{ 'mount ' + buildiso_mount.args + ' ' + buildiso_mount.src + ' ' + buildiso_mount.dest }}"
+  ansible.builtin.command: "mount {{ item.args }} {{ item.src }} {{ item.dest }}"
   args:
     warn: false
-    creates: "{{ buildiso_mount.dest + '/.disk/info' }}"
+    creates: "{{ item.dest }}/.disk/info"
   loop:
-    - src: "{{ buildiso_image }}"
+    - src: "{{ buildiso_output | regex_replace(buildiso_output | basename, buildiso_src.image) }}"
       dest: "{{ buildiso_readonly }}"
       args: '-o loop,ro'
-    - src: none
+    - src: overlay
       dest: "{{ buildiso_writable }}"
-      args: "{{ '-t aufs -o br=' + buildiso_backing + ':' + buildiso_readonly }}"
+      args: "-t overlay -o lowerdir={{ buildiso_readonly }},upperdir={{ buildiso_backing }},workdir={{ buildiso_workdir }}"
   loop_control:
-    loop_var: buildiso_mount
-    label: "{{ buildiso_mount.dest }}"
+    label: "{{ item.dest }}"
+  become: true
 
 - name: Enumerate release codename
-  stat:
-    path: "{{ buildiso_readonly + '/dists/stable' }}"
+  ansible.builtin.stat:
+    path: "{{ buildiso_readonly }}/dists/stable"
     follow: false
-  register: buildiso_dist_check
+  register: buildiso_distcheck
+  become: false
 
 - name: Define buildiso_dist variable
-  set_fact:
-    buildiso_dist: "{{ buildiso_dist_check.stat.lnk_target }}"
+  ansible.builtin.set_fact:
+    buildiso_dist: "{{ buildiso_distcheck.stat.lnk_target }}"
+  become: false
 
-- name: Read original files
-  slurp:
-    src: "{{ buildiso_readonly + item }}"
-  loop:
-    - /boot/grub/grub.cfg
-    - /preseed/ubuntu.seed
-  register: buildiso_readfiles
+- name: Ensure boot configuration
+  block:
+    - name: Ensure /boot/grub/grub.cfg
+      ansible.builtin.template:
+        src: boot/grub/grub.cfg.j2
+        dest: "{{ buildiso_writable }}/boot/grub/grub.cfg"
+      become: true
 
-- name: Ensure image configuration
-  template:
-    src: "{{ item + '.j2' }}"
-    dest: "{{ buildiso_writable + '/' + item | regex_replace('ubuntu', buildiso_preseed_name | default('ubuntu')) }}"
-  loop:
-    - boot/grub/grub.cfg
-    - isolinux/txt.cfg
-    - preseed/ubuntu.seed
+    - name: Ensure /isolinux/txt.cfg
+      ansible.builtin.template:
+        src: isolinux/txt.cfg.j2
+        dest: "{{ buildiso_writable }}/isolinux/txt.cfg"
+      when: ansible_distribution_version is version('21.10', 'lt')
+      become: true
+  when: buildiso_bootmenu is defined
+
+- name: Ensure preseed files
+  ansible.builtin.copy:
+    content: "{{ item.content | default(omit) }}"
+    src: "{{ item.src | default(omit) }}"
+    dest: "{{ buildiso_writable }}/preseed/{{ item.name }}.seed"
+  loop: "{{ buildiso_preseed | default([]) }}"
   loop_control:
-    label: "{{ '/' + item | regex_replace('ubuntu', buildiso_preseed_name | default('ubuntu')) }}"
-  register: buildiso_template
+    label: "/preseed/{{ item.name }}.seed"
+  become: true
 
-- name: Create file target directory
-  file:
-    path: "{{ buildiso_writable + '/extras/' + item }}"
+- name: Ensure target directory
+  ansible.builtin.file:
+    path: "{{ buildiso_writable }}/extras/{{ item }}"
     state: directory
-  loop: "{{ buildiso_files | default([]) | json_query('[].src') | map('dirname') | list | unique }}"
+  loop: "{{ buildiso_files | default([]) | selectattr('dest', 'defined') | map(attribute='dest') | map('dirname') | list | unique }}"
   loop_control:
-    label: "{{ '/extras/' + item }}"
-  when: buildiso_files is defined
+    label: "/extras/{{ item }}"
+  become: true
 
-- name: Copy files to image
-  copy:
-    src: "{{ playbook_dir + '/' + item.src }}"
-    dest: "{{ buildiso_writable + '/extras/' + item.dest | default(item.src) }}"
+- name: Ensure files copied
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ buildiso_writable }}/extras/{{ item.dest | default(None) }}"
     mode: "{{ item.mode | default('preserve') }}"
-  loop: "{{ buildiso_files | default([]) }}"
+    remote_src: true
+  loop: "{{ buildiso_files | default([]) | selectattr('src', 'defined') | list }}"
   loop_control:
-    label: "{{ '/extras/' + item.dest | default(item.src) }}"
-  register: buildiso_copy
+    label: "/extras/{{ item.dest | default(item.src | basename) }}"
+  become: true
 
-- name: Sync PPA to image
-  include_tasks: syncppa.yml
+- name: Sync PPAs and build image if defined
+  block:
+    - name: Enumerate PPA sync directory
+      ansible.builtin.find:
+        paths: "{{ buildiso_syncppa }}"
+        recurse: true
+      register: buildiso_syncppa_pre
+      become: false
+
+    - name: Synchronise PPA(s)
+      ansible.builtin.include_tasks: syncppa.yml
+      loop: "{{ [buildiso_ppa] if buildiso_ppa | default([]) is string else buildiso_ppa | default([]) }}"
+      loop_control:
+        loop_var: buildiso_ppa_item
+
+    - name: Enumerate PPA sync directory
+      ansible.builtin.find:
+        paths: "{{ buildiso_syncppa }}"
+        recurse: true
+      register: buildiso_syncppa_post
+      become: false
+
+    - name: Build ppa.squashfs image
+      ansible.builtin.command: "mksquashfs {{ buildiso_syncppa }} {{ buildiso_writable }}/casper/ppa.squashfs -noappend"
+      when: (buildiso_syncppa_pre != buildiso_syncppa_post) or
+             buildiso_forcebuild is defined
+      become: true
   when: buildiso_ppa is defined
 
 - name: Enumerate extra files
-  find:
-    paths: "{{ buildiso_writable + '/extras/' }}"
+  ansible.builtin.find:
+    paths:
+      - "{{ buildiso_writable }}/preseed/"
+      - "{{ buildiso_writable }}/extras/"
     recurse: true
     file_type: file
-  register: buildiso_extras
+  register: buildiso_found
+  become: true
 
-- name: Gather MD5SUM for file(s)
-  stat:
-    path: "{{ item }}"
+- name: Enumerate MD5SUM for file(s)
+  ansible.builtin.stat:
+    path: "{{ buildiso_writable + item }}"
     get_mime: false
     get_checksum: true
     get_attributes: false
     checksum_algorithm: md5
-  loop: "{{ buildiso_template.results | json_query('[*].{path: dest}') | union(buildiso_extras.files) | json_query('[*].path') }}"
+  loop: "{{ ['/boot/grub/grub.cfg', '/casper/ppa.squashfs', '/isolinux/txt.cfg'] |
+            union(buildiso_found.files | map(attribute='path') | reject('contains', '.git') |
+            map('regex_replace', buildiso_writable)) | list }}"
   loop_control:
     label: "{{ item | regex_replace(buildiso_writable) }}"
-  register: buildiso_extras
+  register: buildiso_checksums
+  become: false
 
 - name: Ensure MD5SUM in md5sum.txt
-  lineinfile:
-    path: "{{ buildiso_writable + '/md5sum.txt' }}"
-    regexp: "{{ '^[a-z0-9]{32}  ' + item.file + '$' }}"
-    line: "{{ item.md5sum + '  ' + item.file }}"
+  ansible.builtin.lineinfile:
+    path: "{{ buildiso_writable }}/md5sum.txt"
+    line: "{{ item.stat.checksum }}  {{ item.stat.path }}"
+    regexp: "^[a-z0-9]{32}  {{ item.stat.path }}$"
     create: true
     state: present
-  loop: "{{ buildiso_extras | json_query('results[*].stat | [].{file: path, md5sum: checksum}') | regex_replace(buildiso_writable, '.') }}"
+  loop: "{{ buildiso_checksums.results | selectattr('stat.checksum', 'defined') | regex_replace(buildiso_writable, '.') }}"
   loop_control:
-    label: "[u'{{ item.md5sum }}', u'{{ item.file }}']"
+    label: "[u'{{ item.stat.checksum }}', u'{{ item.stat.path }}']"
   register: buildiso_checksum
+  become: true
+
+- name: Ensure output directory exist
+  ansible.builtin.file:
+    path: "{{ buildiso_output | dirname }}"
+    state: directory
 
 - name: Create ISO image and make UEFI bootable
-  command: "{{ buildiso_create }}"
-  loop:
-    - mkisofs -D -r -V "{{ buildiso_name | default('Ubuntu') }}" -cache-inodes -J -l -b isolinux/isolinux.bin
-      -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -eltorito-alt-boot -e boot/grub/efi.img
-      -no-emul-boot -o {{ buildiso_output }} {{ buildiso_writable }}
-    - isohybrid -t 0 -u "{{ buildiso_output }}"
-  loop_control:
-    loop_var: buildiso_create
-    label: "{{ buildiso_create | regex_search('\\w+') + ' ... ' + buildiso_output }}"
-  when: (buildiso_ppa_checksum is defined and buildiso_ppa_checksum is changed) or
-         buildiso_checksum is changed or
-         buildiso_download_iso is changed or
-         buildiso_forcebuild is defined
+  block:
+    - name: Generate installation image
+      ansible.builtin.command:
+        cmd: "xorriso -as mkisofs
+             -checksum_algorithm_iso md5,sha1 -iso-level 3
+             -D -r -V \"{{ buildiso_name | default('Ubuntu') }}\"
+             -cache-inodes -J -joliet-long -l
+             -b {{ buildiso_boot }} -c {{ buildiso_cat }}
+             -no-emul-boot -boot-load-size 4 -boot-info-table
+             {% if buildiso_grub %}
+             --grub2-boot-info --grub2-mbr {{ buildiso_grub }}
+             {% endif %}
+             -append_partition 2 0xef {{ buildiso_efi }} -appended_part_as_gpt
+             --mbr-force-bootable -iso_mbr_part_type 0x83
+             -eltorito-alt-boot -e '--interval:appended_partition_2:all::'
+             -no-emul-boot -partition_offset 16 -o {{ buildiso_output }} {{ buildiso_writable }}"
+      become: true
+
+    - name: Make image bootable as hard disk
+      ansible.builtin.command:
+        cmd: "isohybrid -t 0 -u {{ buildiso_output }}"
+      when: ansible_distribution_version is version('21.10', 'lt')
+      become: true
+  when: buildiso_checksum is changed or
+        buildiso_download is changed or
+        buildiso_forcebuild is defined
 
 - name: Ensure correct manifest file
-  fetch:
+  ansible.builtin.fetch:
     src: "{{ buildiso_writable }}/casper/filesystem.manifest"
     dest: "{{ buildiso_output | splitext | first }}.manifest"
     flat: true
+  become: false
 
-- name: Run cleanup tasks
-  include_tasks: cleanup.yml
+- name: Ensure output file permissions
+  ansible.builtin.file:
+    path: "{{ item.0 }}.{{ item.1 }}"
+    owner: "{{ lookup('env', 'USER') }}"
+    group: "{{ lookup('env', 'USER') }}"
+  loop: "{{ [buildiso_output | splitext | first] | product(['iso', 'manifest']) | list }}"
+  loop_control:
+    label: "{{ item.0 }}.{{ item.1 }}"
+  become: true
+
+- name: Enumerate temporary folders
+  ansible.builtin.find:
+    paths: /tmp/
+    recurse: false
+    patterns: "{{ buildiso_output | basename | splitext | first }}*"
+    file_type: directory
+  register: buildiso_temporary_directories
+  become: false
+  tags:
+    - never
+    - cleanup
+
+- name: Unmount directories
+  ansible.builtin.command: "umount {{ buildiso_writable }} {{ buildiso_readonly }}"
+  args:
+    warn: false
+    removes: "{{ buildiso_readonly }}/.disk/info"
+  become: true
+  tags:
+    - never
+    - cleanup
+
+- name: Remove temporary directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ buildiso_temporary_directories.files | map(attribute='path') }}"
+  become: true
   tags:
     - never
     - cleanup

@@ -1,120 +1,122 @@
 ---
 - name: Set PPA facts
-  set_fact:
-    buildiso_ppa_api: "{{ buildiso_ppa | regex_replace('ppa:([a-z0-9-]+)/([a-z0-9-]+)', 'https://launchpad.net/api/1.0/~\\1/+archive/\\2') }}"
-    buildiso_ppa_url: "{{ buildiso_ppa | regex_replace('ppa:([a-z0-9-]+)/([a-z0-9-]+)', 'http://ppa.launchpad.net/\\1/\\2/ubuntu') }}"
-    buildiso_ppa_name: "{{ buildiso_ppa | regex_replace('ppa:[a-z0-9-]+/([a-z0-9-]+)', '\\1') }}"
-    buildiso_ppa_dist: "{{ '/dists/' + buildiso_dist + '/' }}"
-    buildiso_ppa_path: "{{ buildiso_ppafs + '/ppa' }}"
+  ansible.builtin.set_fact:
+    buildiso_ppa_api: "{{ buildiso_ppa_item | regex_replace('ppa:([a-z0-9-]+)/([a-z0-9-]+)', 'https://launchpad.net/api/1.0/~\\1/+archive/\\2') }}"
+    buildiso_ppa_url: "{{ buildiso_ppa_item | regex_replace('ppa:([a-z0-9-]+)/([a-z0-9-]+)', 'http://ppa.launchpad.net/\\1/\\2/ubuntu') }}"
+    buildiso_ppa_name: "{{ buildiso_ppa_item | regex_replace('ppa:[a-z0-9-]+/([a-z0-9-]+)', '\\1') }}"
+    buildiso_ppa_owner: "{{ buildiso_ppa_item | regex_replace('ppa:([a-z0-9-]+)/[a-z0-9-]+', '\\1') }}"
+    buildiso_ppa_dist: "/dists/{{ buildiso_dist }}/"
+    buildiso_ppa_path: "/ppa/{{ buildiso_ppa_item | regex_replace('ppa:([a-z0-9-]+/[a-z0-9-]+)', '\\1') }}/"
+  become: false
 
 - name: Fetch PPA information
-  uri:
+  ansible.builtin.uri:
     url: "{{ buildiso_ppa_api }}"
     return_content: true
   register: buildiso_ppa_info
+  become: false
 
 - name: Ensure base directories
-  file:
-    path: "{{ buildiso_ppafs + item }}"
+  ansible.builtin.file:
+    path: "{{ buildiso_syncppa + item }}"
     state: directory
   loop:
+    - /etc/apt/preferences.d/
     - /etc/apt/sources.list.d/
     - /etc/apt/trusted.gpg.d/
-    - "{{ '/ppa' + buildiso_ppa_dist }}"
+    - "{{ buildiso_ppa_path.rstrip('/') + buildiso_ppa_dist }}"
+  become: true
 
 - name: Ensure repository keyring
-  apt_key:
+  ansible.builtin.apt_key:
     id: "{{ buildiso_ppa_info.json.signing_key_fingerprint }}"
-    keyring: "{{ buildiso_ppafs + '/etc/apt/trusted.gpg.d/' + buildiso_ppa_name + '.gpg' }}"
+    keyring: "{{ buildiso_syncppa }}/etc/apt/trusted.gpg.d/{{ buildiso_ppa_owner }}.gpg"
     keyserver: keyserver.ubuntu.com
+  become: true
 
 - name: Ensure repository sources.list
-  copy:
-    content: "{{ 'deb [arch=amd64] file:///ppa/ ' + buildiso_dist + ' main main/debian-installer' }}"
-    dest: "{{ buildiso_ppafs + '/etc/apt/sources.list.d/' + buildiso_ppa_name + '.list' }}"
+  ansible.builtin.copy:
+    content: "deb [arch=amd64] file://{{ buildiso_ppa_path }} {{ buildiso_dist }} main"
+    dest: "{{ buildiso_syncppa }}/etc/apt/sources.list.d/{{ buildiso_ppa_owner }}-{{ buildiso_ppa_name }}.list"
+  become: true
+
+- name: Ensure repository pinning
+  ansible.builtin.copy:
+    content: |-
+      Package: *
+      Pin: origin ""
+      Pin-Priority: 995
+    dest: "{{ buildiso_syncppa }}/etc/apt/preferences.d/ppa"
+  become: true
 
 - name: Sync Release files
-  get_url:
+  ansible.builtin.get_url:
     url: "{{ buildiso_ppa_url + buildiso_ppa_dist + item }}"
-    dest: "{{ buildiso_ppa_path + buildiso_ppa_dist + item }}"
-    force: true
+    dest: "{{ buildiso_syncppa + buildiso_ppa_path + buildiso_ppa_dist + item }}"
   loop:
     - InRelease
     - Release
     - Release.gpg
+  become: true
 
 - name: Read InRelease file
-  slurp:
-    src: "{{ buildiso_ppa_path + buildiso_ppa_dist + 'InRelease' }}"
+  ansible.builtin.slurp:
+    src: "{{ buildiso_syncppa + buildiso_ppa_path + buildiso_ppa_dist }}InRelease"
   register: buildiso_ppa_InRelease
+  become: false
 
 - name: Ensure dists directories
-  file:
-    path: "{{ buildiso_ppa_path + buildiso_ppa_dist + 'main/' + item }}"
+  ansible.builtin.file:
+    path: "{{ buildiso_syncppa + buildiso_ppa_path + buildiso_ppa_dist }}main/{{ item }}"
     state: directory
   loop:
     - binary-amd64
     - debian-installer/binary-amd64
     - i18n
   loop_control:
-    label: "{{ 'main/' + item }}"
+    label: "main/{{ item }}"
   register: buildiso_ppa_metadir
+  become: true
 
 - name: Sync dists files
-  get_url:
+  ansible.builtin.get_url:
     url: "{{ buildiso_ppa_url + buildiso_ppa_dist + item.1 }}"
-    dest: "{{ buildiso_ppa_path + buildiso_ppa_dist + item.1 }}"
-    checksum: "{{ 'sha256:' + item.0 }}"
-  loop: "{{ buildiso_ppa_InRelease.content | b64decode | \
-            regex_findall(' ([a-z0-9]{64})\\s+\\d+ (main/(' + buildiso_ppa_metadir.results | \
+    dest: "{{ buildiso_syncppa + buildiso_ppa_path + buildiso_ppa_dist + item.1 }}"
+    checksum: "sha256:{{ item.0 }}"
+  loop: "{{ buildiso_ppa_InRelease.content | b64decode |
+            regex_findall(' ([a-f0-9]{64})\\s+\\d+ (main/(' + buildiso_ppa_metadir.results |
             map(attribute='item') | list | join('|') + ')/[a-zA-Z0-9-_\\.]*)') | unique }}"
   loop_control:
     label: "[u'{{ item.0 }}', u'{{ item.1 }}']"
   register: buildiso_ppa_syncmeta
   when: ('Packages' != item.1 | basename) and ('Translation-en' != item.1 | basename) and ('Sources' != item.1 | basename)
+  become: true
 
 - name: Read Packages files
-  command: "{{ 'zgrep -h -e ^Filename: -e ^SHA256: ' + buildiso_ppa_syncmeta.results | to_json | from_json | \
-               json_query('[?skipped != `true`] | [?ends_with(dest, `Packages.gz`)].dest') | join(' ') }}"
+  ansible.builtin.command: "zgrep -h -e ^Filename: -e ^SHA256: {{ buildiso_ppa_syncmeta.results | selectattr('dest', 'defined') |
+            selectattr('dest', 'regex', 'Packages.gz$') | map(attribute='dest') | join(' ') }}"
   register: buildiso_ppa_pool
   failed_when: false
   changed_when: false
+  become: false
 
 - name: Ensure pool directories
-  file:
-    path: "{{ buildiso_ppa_path + '/' + item }}"
+  ansible.builtin.file:
+    path: "{{ buildiso_syncppa + buildiso_ppa_path + item }}"
     state: directory
     unsafe_writes: true
   loop: "{{ buildiso_ppa_pool.stdout | regex_findall('Filename: (.*)/.*') | unique }}"
+  become: true
 
 - name: Sync pool files
-  get_url:
-    url: "{{ buildiso_ppa_url + '/' + item.0 }}"
-    dest: "{{ buildiso_ppa_path + '/' + item.0 }}"
-    checksum: "{{ 'sha256:' + item.1 }}"
-  loop: "{{ buildiso_ppa_pool.stdout | regex_findall('Filename: (.*)') | \
-            zip(buildiso_ppa_pool.stdout | regex_findall('SHA256: ([a-z0-9]{64})')) | list | unique }}"
+  ansible.builtin.get_url:
+    url: "{{ buildiso_ppa_url }}/{{ item.0 }}"
+    dest: "{{ buildiso_syncppa + buildiso_ppa_path + item.0 }}"
+    checksum: "sha256:{{ item.1 }}"
+  loop: "{{ buildiso_ppa_pool.stdout | regex_findall('Filename: (.*)') |
+        zip(buildiso_ppa_pool.stdout | regex_findall('SHA256: ([a-f0-9]{64})')) |
+        list | unique }}"
   loop_control:
     label: "[u'{{ item.1 }}', u'{{ item.0 }}']"
   register: buildiso_ppa_syncpool
-
-- name: Build squashfs image
-  command: "{{ 'mksquashfs ' + buildiso_ppafs + ' ' + buildiso_writable + '/casper/ppa.squashfs -noappend' }}"
-  when: buildiso_ppa_syncmeta is changed or buildiso_ppa_syncpool is changed or buildiso_forcebuild is defined
-
-- name: Gather MD5SUM for squashfs image
-  stat:
-    path: "{{ buildiso_writable + '/casper/ppa.squashfs' }}"
-    get_mime: false
-    get_checksum: true
-    get_attributes: false
-    checksum_algorithm: md5
-  register: buildiso_ppa_squashfs
-
-- name: Ensure squashfs image checksum in md5sum.txt
-  lineinfile:
-    path: "{{ buildiso_writable + '/md5sum.txt' }}"
-    line: "{{ buildiso_ppa_squashfs.stat.checksum + '  ./casper/ppa.squashfs' }}"
-    create: true
-    state: present
-  register: buildiso_ppa_checksum
+  become: true

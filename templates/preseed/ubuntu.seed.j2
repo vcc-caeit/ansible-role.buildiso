@@ -1,1 +1,0 @@
-{{ buildiso_preseed_content | default(buildiso_readfiles.results | to_json | from_json | json_query('[?item==`/preseed/ubuntu.seed`].content') | b64decode, true) }}
